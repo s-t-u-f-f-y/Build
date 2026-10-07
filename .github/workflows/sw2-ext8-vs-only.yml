@@ -35,9 +35,9 @@ jobs:
           python sw2-ext8/fix_nearest_vs.py sw2
           python sw2-ext8/fix_pack4.py sw2
           cd sw2
-          git checkout eee9eb9a56d349c2c21452d9a163e6ddaf4b240e -- binary/src/shaders/hlsl/VertexDeformation_ps30.hlsl binary/src/shaders/hlsl/VertexDeformationVertexLit_ps30.hlsl
+          git checkout eee9eb9a56d349c2c21452d9a163e6ddaf4b240e -- binary/src/shaders/VertexDeformation.h binary/src/shaders/hlsl/VertexDeformation_vs30.hlsl binary/src/shaders/hlsl/VertexDeformation_ps30.hlsl binary/src/shaders/hlsl/VertexDeformationVertexLit_ps30.hlsl
           cd ..
-          python sw2-ext8/verify_vs_only.py sw2
+          python sw2-ext8/verify_vertexlit_only.py sw2
 
       - name: Prepare shader compiler
         shell: pwsh
@@ -62,7 +62,7 @@ jobs:
           $fake = Join-Path $PWD "fakegmod"
           New-Item -ItemType Directory -Force $fake | Out-Null
           Set-Content (Join-Path $fake "gameinfo.txt") '"GameInfo" { game "SW2 EXT8 CI" }' -Encoding ASCII
-          $names = @("VertexDeformation_vs30.hlsl","VertexDeformationVertexLit_vs30.hlsl")
+          $names = @("VertexDeformationVertexLit_vs30.hlsl")
           foreach ($name in $names) { Copy-Item (Join-Path $hlsl $name) (Join-Path $std $name) -Force }
           $names | Set-Content (Join-Path $std "sdkshaders_dx9_30.txt") -Encoding ASCII
           Push-Location $std
