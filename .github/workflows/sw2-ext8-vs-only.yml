@@ -74,7 +74,7 @@ jobs:
             Copy-Item (Join-Path $std ("include/" + $stem + ".inc")) "$PWD/sw2/binary/src/shaders/inc/" -Force
             Copy-Item (Join-Path $std ("shaders/fxc/" + $stem + ".vcs")) "$PWD/sw2/binary/src/shaders/vcs/" -Force
           }
-          python sw2-ext8/verify_vs_only.py sw2
+          python sw2-ext8/verify_vertexlit_only.py sw2
 
       - name: Download Premake
         shell: pwsh
