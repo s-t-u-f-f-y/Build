@@ -16,15 +16,15 @@ for rel in ['binary/src/shaders/VertexDeformation.h','binary/src/shaders/VertexD
         for k in ('CENTER','ANGLE','SCALE'):
             if f'ELLIPSOID_{k}_{i}' not in s:
                 errors.append(f'{rel}: missing {k}_{i}')
-    if 'packed[40]' not in s or ', packed, 10' not in s:
-        errors.append(f'{rel}: 8-wound packed constants missing')
+    if 'packed[32]' not in s or ', packed, 8' not in s:
+        errors.append(f'{rel}: 32-float / 8-register EXT8 packing missing')
 
 uvs=txt('binary/src/shaders/hlsl/VertexDeformation_vs30.hlsl')
 vvs=txt('binary/src/shaders/hlsl/VertexDeformationVertexLit_vs30.hlsl')
 ups=txt('binary/src/shaders/hlsl/VertexDeformation_ps30.hlsl')
 vps=txt('binary/src/shaders/hlsl/VertexDeformationVertexLit_ps30.hlsl')
 
-for i in range(10):
+for i in range(8):
     if f'g_EP{i}' not in uvs: errors.append(f'Unlit VS missing g_EP{i}')
     if f'g_EP{i}' not in vvs: errors.append(f'VertexLit VS missing g_EP{i}')
 
