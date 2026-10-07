@@ -71,7 +71,12 @@ jobs:
           Pop-Location
           foreach ($name in $names) {
             $stem = [IO.Path]::GetFileNameWithoutExtension($name)
-            Copy-Item (Join-Path $std ("include/" + $stem + ".inc")) "$PWD/sw2/binary/src/shaders/inc/" -Force
+            $incDst = Join-Path $PWD ("sw2/binary/src/shaders/inc/" + $stem + ".inc")
+            Copy-Item (Join-Path $std ("include/" + $stem + ".inc")) $incDst -Force
+            $incText = Get-Content $incDst -Raw
+            $incText = [regex]::Replace($incText, '(\w+_Static_Index)\s*\(\s*IShaderShadow\s*\*\s*pShaderShadow\s*,\s*IMaterialVar\s*\*\*\s*params\s*\)', '$1()')
+            $incText = [regex]::Replace($incText, '(\w+_Dynamic_Index)\s*\(\s*IShaderDynamicAPI\s*\*\s*pShaderAPI\s*\)', '$1()')
+            Set-Content $incDst $incText -Encoding UTF8
             Copy-Item (Join-Path $std ("shaders/fxc/" + $stem + ".vcs")) "$PWD/sw2/binary/src/shaders/vcs/" -Force
           }
           python sw2-ext8/verify_vertexlit_only.py sw2
