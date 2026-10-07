@@ -99,7 +99,7 @@ jobs:
           if (!$msbuild) { throw "MSBuild not found" }
           $sln = Get-ChildItem "$PWD/sw2/binary/solution_x86_x64" -Recurse -Filter *.sln | Select-Object -First 1
           if (!$sln) { throw "Generated solution not found" }
-          & $msbuild $sln.FullName /m /p:Configuration=Release /p:Platform=x86_64
+          & $msbuild $sln.FullName /m /p:Configuration=Release /p:Platform=x64
           if ($LASTEXITCODE -ne 0) { throw "MSBuild failed: $LASTEXITCODE" }
           $dll = Get-ChildItem "$PWD/sw2" -Recurse -Filter "gmcl_simple_wound_x86_x64_win64.dll" | Select-Object -First 1
           if (!$dll) { throw "Expected win64 DLL not found" }
