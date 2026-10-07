@@ -33,6 +33,7 @@ jobs:
         run: |
           python sw2-ext8/apply_ext8_patch.py sw2
           python sw2-ext8/fix_nearest_vs.py sw2
+          python sw2-ext8/fix_pack4.py sw2
           cd sw2
           git checkout eee9eb9a56d349c2c21452d9a163e6ddaf4b240e -- binary/src/shaders/hlsl/VertexDeformation_ps30.hlsl binary/src/shaders/hlsl/VertexDeformationVertexLit_ps30.hlsl
           cd ..
