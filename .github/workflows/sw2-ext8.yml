@@ -1,0 +1,149 @@
+name: Build SW2 EXT8
+
+on:
+  workflow_dispatch:
+  push:
+    branches:
+      - sw2-ext8-build
+    paths:
+      - "sw2-ext8/**"
+      - ".github/workflows/sw2-ext8.yml"
+
+permissions:
+  contents: read
+
+jobs:
+  build:
+    runs-on: windows-2022
+    timeout-minutes: 45
+
+    steps:
+      - name: Checkout build harness
+        uses: actions/checkout@v4
+        with:
+          ref: sw2-ext8-build
+
+      - name: Clone Simple Wound 2
+        shell: pwsh
+        run: |
+          git clone --recursive https://github.com/2016killer/gmod-simple-wound-v2.git sw2
+          Set-Location sw2
+          git checkout eee9eb9a56d349c2c21452d9a163e6ddaf4b240e
+          git submodule update --init --recursive
+
+      - name: Apply EXT8 patch
+        shell: pwsh
+        run: |
+          python sw2-ext8/apply_ext8_patch.py sw2
+          python sw2-ext8/verify_ext8.py sw2
+
+      - name: Prepare Source SDK 2013 shader compiler
+        shell: pwsh
+        run: |
+          git clone https://github.com/ValveSoftware/source-sdk-2013.git source-sdk-2013
+          Set-Location source-sdk-2013
+          git checkout b8cfb12c0e083a2ef5b2f9f9b50f3902fa034474
+          Set-Location ..
+
+          $devbin = Join-Path $PWD "source-sdk-2013/src/devtools/bin"
+          $std = Join-Path $PWD "source-sdk-2013/src/materialsystem/stdshaders"
+          New-Item -ItemType Directory -Force $devbin | Out-Null
+
+          Invoke-WebRequest "https://github.com/SCell555/ShaderCompile/releases/download/build_235_20231013.2/ShaderCompile.exe" -OutFile (Join-Path $devbin "ShaderCompile.exe")
+          Invoke-WebRequest "https://raw.githubusercontent.com/SCell555/ShaderCompile/master/scripts/bin/process_shaders.ps1" -OutFile (Join-Path $devbin "process_shaders.ps1")
+          Invoke-WebRequest "https://raw.githubusercontent.com/SCell555/ShaderCompile/master/scripts/stdshaders/buildshaders.bat" -OutFile (Join-Path $std "buildshaders.bat")
+          Invoke-WebRequest "https://raw.githubusercontent.com/SCell555/ShaderCompile/master/scripts/headers/cshader.h" -OutFile (Join-Path $PWD "source-sdk-2013/src/public/shaderlib/cshader.h")
+
+      - name: Compile EXT8 shaders
+        shell: pwsh
+        run: |
+          $std = Join-Path $PWD "source-sdk-2013/src/materialsystem/stdshaders"
+          $hlsl = Join-Path $PWD "sw2/binary/src/shaders/hlsl"
+          $fake = Join-Path $PWD "fakegmod"
+          New-Item -ItemType Directory -Force $fake | Out-Null
+          Set-Content -Path (Join-Path $fake "gameinfo.txt") -Value '"GameInfo" { game "SW2 EXT8 CI" }' -Encoding ASCII
+
+          $shaderFiles = Get-ChildItem $hlsl -File | Where-Object { $_.Name -match '30\.(hlsl|fxc)$' }
+          foreach ($f in $shaderFiles) {
+            Copy-Item $f.FullName (Join-Path $std $f.Name) -Force
+          }
+          $shaderFiles.Name | Set-Content (Join-Path $std "sdkshaders_dx9_30.txt") -Encoding ASCII
+
+          Push-Location $std
+          try {
+            & .\buildshaders.bat sdkshaders_dx9_30 -game $fake -source (Join-Path $PWD "..\..") -force30
+            if ($LASTEXITCODE -ne 0) { throw "Shader build returned exit code $LASTEXITCODE" }
+          } finally {
+            Pop-Location
+          }
+
+          $incDst = Join-Path $PWD "sw2/binary/src/shaders/inc"
+          $vcsDst = Join-Path $PWD "sw2/binary/src/shaders/vcs"
+          New-Item -ItemType Directory -Force $incDst,$vcsDst | Out-Null
+
+          foreach ($f in $shaderFiles) {
+            $stem = [System.IO.Path]::GetFileNameWithoutExtension($f.Name)
+            $inc = Join-Path $std ("include/" + $stem + ".inc")
+            $vcs = Join-Path $std ("shaders/fxc/" + $stem + ".vcs")
+            if (!(Test-Path $inc)) { throw "Missing generated INC: $inc" }
+            if (!(Test-Path $vcs)) { throw "Missing generated VCS: $vcs" }
+            Copy-Item $inc $incDst -Force
+            Copy-Item $vcs $vcsDst -Force
+          }
+
+          python sw2-ext8/verify_ext8.py sw2
+
+      - name: Download compatible Premake
+        shell: pwsh
+        run: |
+          $url = "https://github.com/danielga/garrysmod_common/releases/download/premake-build%2F5.0.0-beta2/premake-5.0.0-beta2-windows.zip"
+          Invoke-WebRequest $url -OutFile premake.zip
+          Expand-Archive premake.zip -DestinationPath premake -Force
+          Get-ChildItem premake -Recurse
+
+      - name: Generate Visual Studio solution
+        shell: pwsh
+        run: |
+          $premake = (Get-ChildItem "$PWD/premake" -Recurse -Filter premake5.exe | Select-Object -First 1).FullName
+          if (!$premake) { throw "premake5.exe not found" }
+          Push-Location "$PWD/sw2/binary"
+          try {
+            & $premake --file=premake5_x86_x64.lua vs2022
+            if ($LASTEXITCODE -ne 0) { throw "Premake failed with $LASTEXITCODE" }
+          } finally {
+            Pop-Location
+          }
+
+      - name: Build x86_64 DLL
+        shell: pwsh
+        run: |
+          $vswhere = "${env:ProgramFiles(x86)}\Microsoft Visual Studio\Installer\vswhere.exe"
+          $msbuild = & $vswhere -latest -products * -requires Microsoft.Component.MSBuild -find MSBuild\**\Bin\MSBuild.exe | Select-Object -First 1
+          if (!$msbuild) { throw "MSBuild not found" }
+
+          $sln = Get-ChildItem "$PWD/sw2/binary/solution_x86_x64" -Recurse -Filter *.sln | Select-Object -First 1
+          if (!$sln) { throw "Generated solution not found" }
+
+          & $msbuild $sln.FullName /m /p:Configuration=Release /p:Platform=x86_64
+          if ($LASTEXITCODE -ne 0) { throw "MSBuild failed with $LASTEXITCODE" }
+
+          $dll = Get-ChildItem "$PWD/sw2" -Recurse -Filter "gmcl_simple_wound_x86_x64_win64.dll" | Select-Object -First 1
+          if (!$dll) {
+            Write-Host "DLLs found:"
+            Get-ChildItem "$PWD/sw2" -Recurse -Filter "*.dll" | ForEach-Object { Write-Host $_.FullName }
+            throw "Expected win64 DLL not found"
+          }
+
+          New-Item -ItemType Directory -Force "$PWD/artifact/lua/bin","$PWD/artifact/shaders/fxc" | Out-Null
+          Copy-Item $dll.FullName "$PWD/artifact/lua/bin/gmcl_simple_wound_x86_x64_win64.dll" -Force
+          Copy-Item "$PWD/sw2/binary/src/shaders/vcs/VertexDeformation*.vcs" "$PWD/artifact/shaders/fxc/" -Force
+
+          Get-FileHash "$PWD/artifact/lua/bin/gmcl_simple_wound_x86_x64_win64.dll" -Algorithm SHA256
+          Get-ChildItem "$PWD/artifact/shaders/fxc" | Format-Table Name,Length
+
+      - name: Upload EXT8 package
+        uses: actions/upload-artifact@v4
+        with:
+          name: SW2-EXT8-win64
+          path: artifact/
+          if-no-files-found: error
